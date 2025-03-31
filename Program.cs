@@ -9,6 +9,16 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:3001")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 
 builder.Services.AddNpgsql<ExpenseTrackerDbContext>(builder.Configuration["ExpenseTrackerDbConnectionString"]);
 
@@ -22,11 +32,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors();
 app.UseHttpsRedirection();
 
 // Create New User
-app.MapPost("/users", async (ExpenseTrackerDbContext db, User user) =>
+app.MapPost("/api/users", async (ExpenseTrackerDbContext db, User user) =>
 {
+    if (string.IsNullOrWhiteSpace(user.UserId))
+    {
+        user.UserId = Guid.NewGuid().ToString();
+    }
     db.Users.Add(user);
     await db.SaveChangesAsync();
     return Results.Created($"/users/{user.UserId}", user);
@@ -105,6 +120,19 @@ app.MapPut("/users/{userId}", async (ExpenseTrackerDbContext db, string userId, 
         return Results.BadRequest("User ID mismatch");
     }
     db.Entry(user).State = EntityState.Modified;
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+// DELETE User by ID
+app.MapDelete("/users/{userId}", async (ExpenseTrackerDbContext db, string userId) =>
+{
+    var user = await db.Users.FindAsync(userId);
+    if (user == null)
+    {
+        return Results.NotFound();
+    }
+    db.Users.Remove(user);
     await db.SaveChangesAsync();
     return Results.NoContent();
 });
